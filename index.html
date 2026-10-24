@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Edukasi Benar atau Salah (True or False)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Pose & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .font-game {
+            font-family: 'Fredoka', cursive;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        /* Mirror effect for camera canvas */
+        .mirror-canvas {
+            transform: scaleX(-1);
+        }
+        /* Pulse Animation */
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 0.6; }
+        }
+        .animate-glow-green {
+            animation: pulse-glow 2s infinite ease-in-out;
+            background: radial-gradient(circle, rgba(34,197,94,0.4) 0%, rgba(34,197,94,0) 70%);
+        }
+        .animate-glow-red {
+            animation: pulse-glow 2s infinite ease-in-out;
+            background: radial-gradient(circle, rgba(239,68,68,0.4) 0%, rgba(239,68,68,0) 70%);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- TOP HEADER / NAVBAR -->
+    <header class="bg-slate-900/80 backdrop-blur border-b border-slate-800 sticky top-0 z-30 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg shadow-indigo-500/30">
+                    <i class="fa-solid font-game text-2xl text-white">✓✕</i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold font-game tracking-wide text-white flex items-center gap-2">
+                        Game Benar / Salah AI
+                        <span class="text-xs font-sans px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Motion Control</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Gerak Kiri = SALAH | Gerak Kanan = BENAR</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- Status Cloud Firestore -->
+                <div id="cloudStatus" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span>Menghubungkan Database...</span>
+                </div>
+
+                <!-- Tombol Fullscreen Utama -->
+                <button onclick="enterFullScreenGame()" class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 font-game transform hover:scale-105 active:scale-95">
+                    <i class="fa-solid fa-expand text-lg"></i>
+                    <span>LAYAR PENUH & MAIN</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="max-w-7xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+        
+        <!-- LEFT COLUMN: BANK SOAL & KELOLA (5 Cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-5">
+            
+            <!-- CARD 1: KONTROL DAN IMPOR/EKSPOR SOAL -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-bold font-game text-white flex items-center gap-2">
+                        <i class="fa-solid fa-folder-open text-indigo-400"></i> Kelola Bank Soal
+                    </h2>
+                    <span id="questionCountBadge" class="text-xs bg-indigo-950 text-indigo-300 border border-indigo-800 px-2.5 py-1 rounded-full font-semibold">
+                        0 / 100 Soal (Min 5)
+                    </span>
+                </div>
+
+                <!-- PENGATURAN DURASI WAKTU PER SOAL -->
+                <div class="mb-4 bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                    <label for="timerSelect" class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                        <i class="fa-solid fa-stopwatch text-amber-400"></i> Durasi Per Soal:
+                    </label>
+                    <select id="timerSelect" onchange="updateTimerSetting(this.value)" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs font-bold rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                        <option value="5">5 Detik</option>
+                        <option value="10" selected>10 Detik (Default)</option>
+                        <option value="15">15 Detik</option>
+                        <option value="20">20 Detik</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <!-- Tombol Buat Soal Mandiri -->
+                    <button onclick="openQuestionModal()" class="p-3 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 rounded-xl text-indigo-300 hover:text-white font-semibold text-sm transition flex flex-col items-center gap-1.5 text-center">
+                        <i class="fa-solid fa-plus-circle text-xl text-indigo-400"></i>
+                        <span>Buat Soal Baru</span>
+                    </button>
+
+                    <!-- Tombol Upload File -->
+                    <label class="p-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 rounded-xl text-purple-300 hover:text-white font-semibold text-sm transition flex flex-col items-center gap-1.5 text-center cursor-pointer">
+                        <i class="fa-solid fa-file-arrow-up text-xl text-purple-400"></i>
+                        <span>Upload File (JSON/CSV)</span>
+                        <input type="file" id="fileInput" accept=".json, .csv, .txt" class="hidden" onchange="handleFileUpload(event)">
+                    </label>
+                </div>
+
+                <div class="flex gap-2">
+                    <!-- Tombol Simpan ke Cloud Firestore -->
+                    <button onclick="saveQuestionsToCloud()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-cloud-arrow-up text-amber-400"></i>
+                        <span>Simpan Soal Ke Cloud</span>
+                    </button>
+
+                    <!-- Reset Soal Default -->
+                    <button onclick="loadSampleQuestions()" title="Muat Soal Contoh" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 rounded-xl text-xs transition">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CARD 2: LIST DAFTAR SOAL -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-grow flex flex-col">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+                    <span>Daftar Soal Aktif</span>
+                    <span class="text-xs text-slate-500 font-normal">Otomatis Terurut</span>
+                </h3>
+
+                <div id="questionList" class="flex-grow overflow-y-auto max-h-[380px] space-y-2.5 pr-1">
+                    <!-- Iterasi soal dimasukkan via JS -->
+                    <div class="p-4 text-center text-slate-500 text-xs italic bg-slate-950/50 rounded-xl border border-slate-800">
+                        Belum ada soal tersedia. Tambahkan soal atau muat contoh soal.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: KAMERA PREVIEW & KALIBRASI (7 Cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-5">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-full">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-bold font-game text-white flex items-center gap-2">
+                        <i class="fa-solid fa-video text-teal-400"></i> Pratinjau Kamera & Uji Gerak
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <button onclick="toggleCameraMirror()" class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg transition">
+                            <i class="fa-solid fa-right-left mr-1"></i> Flip Kamera
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Camera View Canvas Container -->
+                <div class="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+                    
+                    <!-- Hidden Video Element for Feed Source -->
+                    <video id="webcamVideo" class="hidden" playsinline></video>
+
+                    <!-- Render Canvas -->
+                    <canvas id="cameraCanvas" class="w-full h-full object-cover mirror-canvas"></canvas>
+
+                    <!-- Zone Overlay Divider -->
+                    <div class="absolute inset-0 pointer-events-none flex">
+                        <!-- Left Zone: SALAH -->
+                        <div class="w-1/2 h-full border-r-2 border-dashed border-red-500/40 bg-red-950/10 flex flex-col justify-between p-4">
+                            <div class="bg-red-600/80 text-white font-game font-bold text-sm px-3 py-1 rounded-lg w-max border border-red-400 shadow">
+                                <i class="fa-solid fa-xmark mr-1"></i> SALAH (KIRI)
+                            </div>
+                            <p class="text-[11px] text-red-300/70 text-center font-mono">Posisikan Diri Di Sisi Ini</p>
+                        </div>
+
+                        <!-- Right Zone: BENAR -->
+                        <div class="w-1/2 h-full bg-emerald-950/10 flex flex-col justify-between p-4 items-end">
+                            <div class="bg-emerald-600/80 text-white font-game font-bold text-sm px-3 py-1 rounded-lg w-max border border-emerald-400 shadow">
+                                BENAR (KANAN) <i class="fa-solid fa-check ml-1"></i>
+                            </div>
+                            <p class="text-[11px] text-emerald-300/70 text-center font-mono">Posisikan Diri Di Sisi Ini</p>
+                        </div>
+                    </div>
+
+                    <!-- Current Detected Position Badge -->
+                    <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 text-slate-200 px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
+                        <i class="fa-solid fa-user-tag text-indigo-400"></i>
+                        <span>Posisi Terdeteksi:</span>
+                        <span id="previewDetectedZone" class="font-bold text-amber-400">MENUNGGU KAMERA...</span>
+                    </div>
+
+                    <!-- Start Camera Prompt / Overlay -->
+                    <div id="cameraStartOverlay" class="absolute inset-0 bg-slate-950/90 backdrop-blur flex flex-col items-center justify-center p-6 text-center z-10">
+                        <div class="w-16 h-16 bg-indigo-600/20 rounded-full flex items-center justify-center text-indigo-400 text-2xl mb-3 border border-indigo-500/30 animate-bounce">
+                            <i class="fa-solid fa-camera"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-1">Izinkan Akses Kamera</h3>
+                        <p class="text-xs text-slate-400 max-w-md mb-4">Aplikasi memerlukan akses webcam untuk melacak perpindahan posisi pemain ke zona Benar / Salah secara otomatis.</p>
+                        <button onclick="initCamera()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition">
+                            Nyalakan Kamera Sekarang
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Info Panduan Bermain -->
+                <div class="mt-4 p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-400 flex items-start gap-3">
+                    <i class="fa-solid fa-circle-info text-indigo-400 text-lg mt-0.5"></i>
+                    <div class="space-y-1">
+                        <p class="font-semibold text-slate-300">Petunjuk Permainan:</p>
+                        <p>1. Berdiri di depan kamera. Saat soal dibacakan, bergeraklah ke **Kiri Kamera (Salah)** atau **Kanan Kamera (Benar)**.</p>
+                        <p>2. Tekan tombol **Layar Penuh** untuk memulai dengan tampilan besar interaktif.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-800 bg-slate-900/50 py-3 text-center text-xs text-slate-500">
+        Game Edukasi Interaktif True/False dengan AI Dictation & Motion Sensing
+    </footer>
+
+    <!-- ========================================================================= -->
+    <!-- FULLSCREEN GAME OVERLAY (PERSISTENT DISPLAY READY FOR FULLSCREEN API)     -->
+    <!-- ========================================================================= -->
+    <div id="fullscreenGameOverlay" class="fixed inset-0 bg-slate-950 z-50 hidden flex-col justify-between overflow-hidden">
+        
+        <!-- Live Mirror Video Canvas Fullscreen -->
+        <div class="absolute inset-0 z-0">
+            <canvas id="fullscreenCanvas" class="w-full h-full object-cover mirror-canvas"></canvas>
+            
+            <!-- Split Zone Visual Overlay Backgrounds -->
+            <div class="absolute inset-0 flex pointer-events-none">
+                <!-- Zone Salah (Left Half) -->
+                <div id="fsLeftZoneGlow" class="w-1/2 h-full border-r-4 border-dashed border-red-500/50 transition-all duration-300 flex flex-col justify-end p-8 bg-gradient-to-r from-red-950/30 to-transparent">
+                    <div id="fsLeftZoneBadge" class="bg-red-600/90 text-white font-game font-bold text-3xl md:text-5xl px-6 py-3 rounded-2xl w-max border-2 border-red-400 shadow-2xl tracking-wider transition-all">
+                        <i class="fa-solid fa-xmark mr-2"></i> SALAH
+                    </div>
+                </div>
+
+                <!-- Zone Benar (Right Half) -->
+                <div id="fsRightZoneGlow" class="w-1/2 h-full transition-all duration-300 flex flex-col justify-end items-end p-8 bg-gradient-to-l from-emerald-950/30 to-transparent">
+                    <div id="fsRightZoneBadge" class="bg-emerald-600/90 text-white font-game font-bold text-3xl md:text-5xl px-6 py-3 rounded-2xl w-max border-2 border-emerald-400 shadow-2xl tracking-wider transition-all">
+                        BENAR <i class="fa-solid fa-check ml-2"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOP BAR: POP-UP SOAL OVERLAY -->
+        <header class="relative z-20 p-4 md:p-6 w-full max-w-5xl mx-auto">
+            <div class="bg-slate-900/95 backdrop-blur-md border-2 border-indigo-500/50 rounded-2xl p-4 md:p-6 shadow-2xl text-center relative overflow-hidden transition-all duration-300">
+                
+                <!-- Status Bar Top -->
+                <div class="flex items-center justify-between text-xs md:text-sm font-semibold text-slate-400 mb-2 border-b border-slate-800 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span id="fsQuestionCounter" class="bg-indigo-600/30 text-indigo-300 px-3 py-1 rounded-full border border-indigo-500/30 font-game">
+                            Soal 1 / 10
+                        </span>
+                        <button onclick="dictateCurrentQuestionWithAI()" class="hover:text-white transition flex items-center gap-1.5 text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                            <i class="fa-solid fa-volume-high text-sm"></i>
+                            <span class="text-xs">Ulangi Suara AI</span>
+                        </button>
+                    </div>
+
+                    <!-- Timer Countdown Circle / Text -->
+                    <div class="flex items-center gap-2 font-game text-base text-amber-400">
+                        <i class="fa-solid fa-stopwatch animate-spin"></i>
+                        <span>Waktu: <strong id="fsTimerText" class="text-xl text-white">10</strong> detik</span>
+                    </div>
+
+                    <!-- Live Score -->
+                    <div class="bg-emerald-950/80 text-emerald-300 border border-emerald-800 px-3 py-1 rounded-full font-game">
+                        Skor: <span id="fsScoreText" class="text-white">0</span>
+                    </div>
+                </div>
+
+                <!-- Question Text Pop-Up -->
+                <div id="fsQuestionBox" class="min-h-[70px] flex items-center justify-center py-2">
+                    <p id="fsQuestionText" class="text-xl md:text-3xl font-bold font-game text-white leading-relaxed">
+                        Menyiapkan pertanyaan...
+                    </p>
+                </div>
+
+                <!-- Indicator Message / Result Banner -->
+                <div id="fsFeedbackBanner" class="hidden mt-2 py-2 px-4 rounded-xl text-sm md:text-base font-bold font-game transition-all">
+                    <!-- Text Jawaban Benar / Salah dimuat dinamis -->
+                </div>
+
+                <!-- TOMBOL KONTROL GURU: LIHAT JAWABAN & SOAL SELANJUTNYA -->
+                <div id="fsActionContainer" class="mt-4 flex justify-center gap-3 hidden">
+                    <button id="fsBtnReveal" onclick="revealAnswerAndEvaluate()" class="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold font-game rounded-xl shadow-xl transition flex items-center gap-2 transform hover:scale-105 active:scale-95 text-base">
+                        <i class="fa-solid fa-eye text-lg"></i>
+                        <span>LIHAT JAWABAN (CEK KONDUSIF)</span>
+                    </button>
+                    
+                    <button id="fsBtnNext" onclick="proceedToNextQuestion()" class="hidden px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold font-game rounded-xl shadow-xl transition items-center gap-2 transform hover:scale-105 active:scale-95 text-base">
+                        <span>SOAL SELANJUTNYA</span>
+                        <i class="fa-solid fa-arrow-right text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- CENTER STATE 1: PERSIAPAN PERMAINAN OVERLAY -->
+        <div id="fsPrepOverlay" class="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+            <div class="max-w-xl bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl flex flex-col items-center">
+                <div class="w-20 h-20 bg-emerald-500/20 border border-emerald-500/40 rounded-3xl flex items-center justify-center text-emerald-400 text-4xl mb-4 shadow-lg shadow-emerald-500/10">
+                    <i class="fa-solid fa-gamepad"></i>
+                </div>
+                <h2 class="text-2xl md:text-3xl font-bold font-game text-white mb-2">Siap Untuk Bermain?</h2>
+                <p class="text-slate-300 text-sm mb-6 leading-relaxed">
+                    Pastikan seluruh badan Anda terlihat di kamera. Berdiri di tengah terlebih dahulu. Ketika tombol mulai ditekan, soal akan didiktekan oleh AI dan Anda punya waktu untuk memilih posisi jawaban!
+                </p>
+
+                <!-- Tombol Memulai Soal -->
+                <button onclick="startCountdownAndPlay()" class="px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xl rounded-2xl shadow-xl shadow-emerald-500/30 transform hover:scale-105 active:scale-95 transition flex items-center gap-3 font-game">
+                    <i class="fa-solid fa-play"></i>
+                    <span>MULAI SOAL SEKARANG</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- CENTER STATE 2: COUNTDOWN OVERLAY (3 - 2 - 1) -->
+        <div id="fsCountdownOverlay" class="absolute inset-0 z-30 bg-slate-950/80 backdrop-blur-sm hidden flex-col items-center justify-center">
+            <span class="text-slate-400 text-lg font-bold font-game uppercase tracking-widest mb-2">Bersiap-siap dalam</span>
+            <span id="fsCountdownNumber" class="text-8xl md:text-9xl font-black font-game text-emerald-400 animate-ping">3</span>
+        </div>
+
+        <!-- CENTER STATE 3: GAMEOVER SUMMARY MODAL -->
+        <div id="fsSummaryOverlay" class="absolute inset-0 z-40 bg-slate-950/90 backdrop-blur-md hidden flex-col items-center justify-center p-6">
+            <div class="max-w-md w-full bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-3xl shadow-2xl text-center flex flex-col items-center">
+                <div class="w-20 h-20 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center text-amber-400 text-4xl mb-3">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <h2 class="text-2xl font-bold font-game text-white mb-1">Permainan Selesai!</h2>
+                <p class="text-xs text-slate-400 mb-6">Berikut ringkasan hasil jawaban Anda:</p>
+
+                <div class="w-full bg-slate-950 p-4 rounded-2xl border border-slate-800 mb-6 space-y-3">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-400">Total Soal:</span>
+                        <strong id="summaryTotalQuestions" class="text-white">0</strong>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-400">Jawaban Benar:</span>
+                        <strong id="summaryCorrectAnswers" class="text-emerald-400">0</strong>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-400">Skor Akhir:</span>
+                        <strong id="summaryFinalScore" class="text-amber-400 font-game text-xl">0</strong>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 w-full">
+                    <button onclick="startCountdownAndPlay()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition font-game">
+                        Main Lagi
+                    </button>
+                    <button onclick="exitFullScreenGame()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm rounded-xl transition">
+                        Keluar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM CONTROL BAR -->
+        <footer class="relative z-20 p-4 bg-slate-900/80 backdrop-blur border-t border-slate-800 flex justify-between items-center max-w-5xl mx-auto w-full rounded-t-2xl">
+            <div class="flex items-center gap-3">
+                <div class="text-xs text-slate-300 font-semibold flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Posisi Saat Ini: <strong id="fsCurrentDetectedZone" class="text-amber-400 font-bold">TENGAH</strong></span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Tombol Selesai Permainan Dini (Kontrol Guru) -->
+                <button onclick="finishGameEarly()" title="Selesaikan permainan sekarang & tampilkan ringkasan" class="px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5 transform hover:scale-105 active:scale-95">
+                    <i class="fa-solid fa-flag-checkered text-amber-400"></i>
+                    <span>Selesai Permainan</span>
+                </button>
+
+                <button onclick="exitFullScreenGame()" class="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-compress"></i>
+                    <span>Keluar Layar Penuh</span>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL BUAT / EDIT SOAL MANDIRI                                            -->
+    <!-- ========================================================================= -->
+    <div id="questionModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                <h3 class="text-lg font-bold font-game text-white" id="modalTitle">Tambah Soal Baru</h3>
+                <button onclick="closeQuestionModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="questionForm" onsubmit="handleQuestionFormSubmit(event)" class="space-y-4">
+                <input type="hidden" id="editQuestionId">
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Pertanyaan / Pernyataan:</label>
+                    <textarea id="modalQuestionText" required rows="3" placeholder="Contoh: Ibu kota negara Indonesia saat ini adalah Jakarta." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Kunci Jawaban Benar:</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-2 cursor-pointer hover:border-emerald-500">
+                            <input type="radio" name="modalAnswer" value="true" checked class="text-emerald-500 focus:ring-emerald-500">
+                            <span class="text-sm font-bold text-emerald-400">BENAR (TRUE)</span>
+                        </label>
+                        <label class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-2 cursor-pointer hover:border-red-500">
+                            <input type="radio" name="modalAnswer" value="false" class="text-red-500 focus:ring-red-500">
+                            <span class="text-sm font-bold text-red-400">SALAH (FALSE)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Penjelasan Tambahan (Opsional):</label>
+                    <input type="text" id="modalExplanationText" placeholder="Contoh: Sesuai undang-undang..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeQuestionModal()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition">
+                        Batal
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition">
+                        Simpan Soal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- GLOBAL APP STATE INITIALIZATION                                           -->
+    <!-- ========================================================================= -->
+    <script>
+        window.appState = {
+            questions: [],
+            currentQuestionIndex: 0,
+            score: 0,
+            gameState: 'IDLE', // IDLE, PREP, COUNTDOWN, PLAYING, WAITING_REVEAL, REVEALED, SUMMARY
+            detectedZone: 'TENGAH', // SALAH, BENAR, TENGAH
+            lockedZoneAtFinish: 'TENGAH',
+            poseDetector: null,
+            cameraUtils: null,
+            cameraActive: false,
+            isMirrored: true,
+            timerDuration: 10, // Default 10 Detik
+            timerSeconds: 10,
+            timerInterval: null,
+            audioPlayer: null,
+            db: null,
+            user: null,
+            appId: typeof __app_id !== 'undefined' ? __app_id : 'true-false-edu-app'
+        };
+    </script>
+
+    <!-- ========================================================================= -->
+    <!-- FIREBASE INITIALIZATION                                                  -->
+    <!-- ========================================================================= -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        async function initFirebase() {
+            const statusEl = document.getElementById('cloudStatus');
+            try {
+                const firebaseConfig = typeof __firebase_config !== 'undefined' 
+                    ? JSON.parse(__firebase_config) 
+                    : { apiKey: "demo", projectId: "demo-app" };
+
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+                window.appState.db = db;
+
+                let userCred;
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    userCred = await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    userCred = await signInAnonymously(auth);
+                }
+                window.appState.user = userCred.user;
+
+                if (statusEl) {
+                    statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Cloud Terhubung</span>`;
+                    statusEl.className = statusEl.className.replace('bg-slate-800 text-slate-300', 'bg-emerald-950/60 text-emerald-300 border-emerald-800');
+                }
+
+                // Load questions from Firestore or fall back
+                if (window.loadQuestionsFromCloud) {
+                    await window.loadQuestionsFromCloud();
+                } else if (window.loadSampleQuestions) {
+                    window.loadSampleQuestions();
+                }
+
+            } catch (err) {
+                console.warn("Firestore connection notice:", err);
+                if (statusEl) {
+                    statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-400"></span><span>Penyimpanan Lokal</span>`;
+                }
+                if (window.loadSampleQuestions) {
+                    window.loadSampleQuestions();
+                }
+            }
+        }
+
+        window.initFirebase = initFirebase;
+        window.addEventListener('DOMContentLoaded', initFirebase);
+    </script>
+
+    <!-- ========================================================================= -->
+    <!-- MAIN GAME LOGIC                                                           -->
+    <!-- ========================================================================= -->
+    <script>
+        /* Sample Questions Default Bank */
+        const DEFAULT_QUESTIONS = [
+            { id: 'q1', text: "Matahari terbit dari sebelah timur.", answer: true, explanation: "Rotasi bumi bergerak dari barat ke timur." },
+            { id: 'q2', text: "Monumen Nasional (Monas) terletak di kota Bandung.", answer: false, explanation: "Monas terletak di Jakarta." },
+            { id: 'q3', text: "Air membeku pada suhu 0 derajat Celsius pada tekanan normal.", answer: true, explanation: "Titik beku air murni adalah 0°C." },
+            { id: 'q4', text: "Paus adalah jenis ikan terbesar di dunia.", answer: false, explanation: "Paus adalah mamalia laut, bukan ikan." },
+            { id: 'q5', text: "Bahasa resmi negara Indonesia adalah Bahasa Indonesia.", answer: true, explanation: "Sesuai UUD 1945 Bab XV Pasal 36." }
+        ];
+
+        function updateTimerSetting(val) {
+            window.appState.timerDuration = parseInt(val, 10) || 10;
+            showToast(`Durasi waktu per soal diset ke ${window.appState.timerDuration} detik`);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        function loadSampleQuestions() {
+            window.appState.questions = [...DEFAULT_QUESTIONS];
+            renderQuestionList();
+            showToast("Berhasil memuat contoh soal default.");
+        }
+        window.loadSampleQuestions = loadSampleQuestions;
+
+        /* Render Question Bank to HTML List */
+        function renderQuestionList() {
+            const listEl = document.getElementById('questionList');
+            const countBadge = document.getElementById('questionCountBadge');
+            const questions = window.appState.questions;
+
+            const isReady = questions.length >= 5 && questions.length <= 100;
+            if (countBadge) {
+                countBadge.innerText = `${questions.length} / 100 Soal ${questions.length < 5 ? '(Min 5 Soal)' : ''}`;
+                countBadge.className = `text-xs px-2.5 py-1 rounded-full font-semibold border ${isReady ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800'}`;
+            }
+
+            if (!listEl) return;
+
+            if (questions.length === 0) {
+                listEl.innerHTML = `
+                    <div class="p-6 text-center text-slate-500 text-xs italic bg-slate-950/50 rounded-xl border border-slate-800">
+                        Belum ada soal tersedia. Minimal butuh 5 soal untuk bermain.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = questions.map((q, idx) => `
+                <div class="p-3 bg-slate-950 hover:bg-slate-800/60 border border-slate-800 rounded-xl transition flex items-center justify-between gap-3 group">
+                    <div class="flex items-start gap-2.5 overflow-hidden">
+                        <span class="text-xs font-bold font-game bg-slate-800 text-slate-300 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                            ${idx + 1}
+                        </span>
+                        <div class="overflow-hidden">
+                            <p class="text-xs font-semibold text-slate-200 truncate">${escapeHtml(q.text)}</p>
+                            <span class="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded ${q.answer ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'}">
+                                ${q.answer ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                        <button onclick="editQuestion('${q.id}')" class="p-1.5 text-slate-400 hover:text-indigo-400 transition" title="Edit Soal">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button onclick="deleteQuestion('${q.id}')" class="p-1.5 text-slate-400 hover:text-red-400 transition" title="Hapus Soal">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        /* Question Form Handlers */
+        function openQuestionModal(editId = null) {
+            const modal = document.getElementById('questionModal');
+            const form = document.getElementById('questionForm');
+            const title = document.getElementById('modalTitle');
+            
+            if (!modal || !form) return;
+            form.reset();
+            document.getElementById('editQuestionId').value = '';
+
+            if (editId) {
+                const q = window.appState.questions.find(item => item.id === editId);
+                if (q) {
+                    title.innerText = 'Edit Soal';
+                    document.getElementById('editQuestionId').value = q.id;
+                    document.getElementById('modalQuestionText').value = q.text;
+                    document.getElementById('modalExplanationText').value = q.explanation || '';
+                    const radio = form.querySelector(`input[name="modalAnswer"][value="${q.answer}"]`);
+                    if (radio) radio.checked = true;
+                }
+            } else {
+                title.innerText = 'Tambah Soal Baru';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeQuestionModal() {
+            const modal = document.getElementById('questionModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function handleQuestionFormSubmit(e) {
+            e.preventDefault();
+            const editId = document.getElementById('editQuestionId').value;
+            const text = document.getElementById('modalQuestionText').value.trim();
+            const answer = document.querySelector('input[name="modalAnswer"]:checked').value === 'true';
+            const explanation = document.getElementById('modalExplanationText').value.trim();
+
+            if (!text) return;
+
+            if (!editId && window.appState.questions.length >= 100) {
+                alert("Maksimal 100 soal telah tercapai! Hapus soal lama terlebih dahulu.");
+                return;
+            }
+
+            if (editId) {
+                const idx = window.appState.questions.findIndex(q => q.id === editId);
+                if (idx !== -1) {
+                    window.appState.questions[idx] = { id: editId, text, answer, explanation };
+                }
+            } else {
+                const newId = 'q_' + Date.now();
+                window.appState.questions.push({ id: newId, text, answer, explanation });
+            }
+
+            renderQuestionList();
+            closeQuestionModal();
+            showToast("Soal berhasil disimpan!");
+        }
+
+        function editQuestion(id) {
+            openQuestionModal(id);
+        }
+
+        function deleteQuestion(id) {
+            window.appState.questions = window.appState.questions.filter(q => q.id !== id);
+            renderQuestionList();
+            showToast("Soal berhasil dihapus.");
+        }
+
+        /* Handler Upload File JSON / CSV */
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                try {
+                    let imported = [];
+                    if (file.name.endsWith('.json')) {
+                        const parsed = JSON.parse(content);
+                        if (Array.isArray(parsed)) {
+                            imported = parsed.map((item, idx) => ({
+                                id: 'q_upload_' + Date.now() + '_' + idx,
+                                text: item.text || item.question || 'Pertanyaan tanpa teks',
+                                answer: typeof item.answer === 'boolean' ? item.answer : (String(item.answer).toLowerCase() === 'true' || String(item.answer) === '1' || String(item.answer).toLowerCase() === 'benar'),
+                                explanation: item.explanation || ''
+                            }));
+                        }
+                    } else {
+                        const lines = content.split('\n');
+                        lines.forEach((line, idx) => {
+                            const cols = line.split(',');
+                            if (cols.length >= 2) {
+                                const qText = cols[0].replace(/^['"]|['"]$/g, '').trim();
+                                const qAnsStr = cols[1].replace(/^['"]|['"]$/g, '').trim().toLowerCase();
+                                const qExp = cols[2] ? cols[2].replace(/^['"]|['"]$/g, '').trim() : '';
+                                if (qText && qText !== 'soal' && qText !== 'question') {
+                                    imported.push({
+                                        id: 'q_csv_' + Date.now() + '_' + idx,
+                                        text: qText,
+                                        answer: (qAnsStr === 'true' || qAnsStr === '1' || qAnsStr === 'benar' || qAnsStr === 'b'),
+                                        explanation: qExp
+                                    });
+                                }
+                            }
+                        });
+                    }
+
+                    if (imported.length > 0) {
+                        const combined = [...window.appState.questions, ...imported];
+                        if (combined.length > 100) {
+                            alert(`Jumlah soal melebihi batas 100 soal. ${combined.length - 100} soal tidak dimasukkan.`);
+                            window.appState.questions = combined.slice(0, 100);
+                        } else {
+                            window.appState.questions = combined;
+                        }
+                        renderQuestionList();
+                        showToast(`Berhasil mengimpor ${window.appState.questions.length} soal.`);
+                    } else {
+                        alert("Tidak ada soal valid yang ditemukan dalam file.");
+                    }
+                } catch (err) {
+                    alert("Gagal membaca file: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        /* Firestore Save & Load Functions */
+        async function saveQuestionsToCloud() {
+            if (!window.appState.db || !window.appState.user) {
+                showToast("Memori lokal aktif (Firestore tidak terhubung)");
+                return;
+            }
+            try {
+                const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                const appId = window.appState.appId;
+                const docRef = doc(window.appState.db, 'artifacts', appId, 'public', 'data', 'question_banks', 'default');
+                await setDoc(docRef, {
+                    questions: window.appState.questions,
+                    updatedAt: new Date().toISOString()
+                });
+                showToast("Soal berhasil disimpan ke Cloud Database!");
+            } catch (err) {
+                console.error("Gagal simpan ke cloud:", err);
+                alert("Gagal menyimpan ke cloud database: " + err.message);
+            }
+        }
+        window.saveQuestionsToCloud = saveQuestionsToCloud;
+
+        async function loadQuestionsFromCloud() {
+            if (!window.appState.db) return;
+            try {
+                const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                const appId = window.appState.appId;
+                const docRef = doc(window.appState.db, 'artifacts', appId, 'public', 'data', 'question_banks', 'default');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data && Array.isArray(data.questions) && data.questions.length > 0) {
+                        window.appState.questions = data.questions;
+                        renderQuestionList();
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn("Gagal memuat dari cloud, memuat default:", err);
+            }
+            loadSampleQuestions();
+        }
+        window.loadQuestionsFromCloud = loadQuestionsFromCloud;
+
+        /* MediaPipe Camera & Pose Detection (Lite Model Complexity for High Speed) */
+        function initCamera() {
+            const videoElement = document.getElementById('webcamVideo');
+            const overlay = document.getElementById('cameraStartOverlay');
+
+            const pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({
+                modelComplexity: 0, // Lite Model for maximum performance & lowest lag
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            pose.onResults(onPoseResults);
+            window.appState.poseDetector = pose;
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await pose.send({ image: videoElement });
+                },
+                width: 640,
+                height: 480
+            });
+
+            camera.start().then(() => {
+                window.appState.cameraActive = true;
+                if (overlay) overlay.classList.add('hidden');
+                showToast("Kamera dinyalakan (Mode Cepat Lite)");
+            }).catch(err => {
+                alert("Gagal menyalakan kamera: " + err.message);
+            });
+        }
+
+        function toggleCameraMirror() {
+            window.appState.isMirrored = !window.appState.isMirrored;
+            const canvases = [document.getElementById('cameraCanvas'), document.getElementById('fullscreenCanvas')];
+            canvases.forEach(c => {
+                if (c) {
+                    if (window.appState.isMirrored) {
+                        c.classList.add('mirror-canvas');
+                    } else {
+                        c.classList.remove('mirror-canvas');
+                    }
+                }
+            });
+        }
+
+        function onPoseResults(results) {
+            drawCanvasFeed('cameraCanvas', results);
+            drawCanvasFeed('fullscreenCanvas', results);
+
+            let detectedZone = 'TENGAH';
+
+            if (results.poseLandmarks && results.poseLandmarks.length > 0) {
+                const nose = results.poseLandmarks[0];
+                let noseX = nose.x;
+
+                if (window.appState.isMirrored) {
+                    noseX = 1.0 - noseX;
+                }
+
+                if (noseX < 0.42) {
+                    detectedZone = 'SALAH';
+                } else if (noseX > 0.58) {
+                    detectedZone = 'BENAR';
+                } else {
+                    detectedZone = 'TENGAH';
+                }
+            }
+
+            window.appState.detectedZone = detectedZone;
+            updateZoneUI(detectedZone);
+        }
+
+        function drawCanvasFeed(canvasId, results) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas || !results.image) return;
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = results.image.width;
+            canvas.height = results.image.height;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+            if (results.poseLandmarks && results.poseLandmarks[0]) {
+                const nose = results.poseLandmarks[0];
+                ctx.beginPath();
+                ctx.arc(nose.x * canvas.width, nose.y * canvas.height, 12, 0, 2 * Math.PI);
+                ctx.fillStyle = window.appState.detectedZone === 'BENAR' ? '#22c55e' : (window.appState.detectedZone === 'SALAH' ? '#ef4444' : '#f59e0b');
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function updateZoneUI(zone) {
+            const previewBadge = document.getElementById('previewDetectedZone');
+            const fsBadge = document.getElementById('fsCurrentDetectedZone');
+            const leftGlow = document.getElementById('fsLeftZoneGlow');
+            const rightGlow = document.getElementById('fsRightZoneGlow');
+
+            // Jangan timpa efek sorot jawaban benar jika sedang dalam mode pengumuman jawaban (REVEALED)
+            if (window.appState.gameState === 'REVEALED') {
+                return;
+            }
+
+            let zoneText = 'TENGAH (NETRAL)';
+            let colorClass = 'text-amber-400';
+
+            if (zone === 'SALAH') {
+                zoneText = 'SALAH (KIRI)';
+                colorClass = 'text-red-400 font-bold';
+                if (leftGlow) leftGlow.classList.add('bg-red-600/30');
+                if (rightGlow) rightGlow.classList.remove('bg-emerald-600/30');
+            } else if (zone === 'BENAR') {
+                zoneText = 'BENAR (KANAN)';
+                colorClass = 'text-emerald-400 font-bold';
+                if (rightGlow) rightGlow.classList.add('bg-emerald-600/30');
+                if (leftGlow) leftGlow.classList.remove('bg-red-600/30');
+            } else {
+                if (leftGlow) leftGlow.classList.remove('bg-red-600/30');
+                if (rightGlow) rightGlow.classList.remove('bg-emerald-600/30');
+            }
+
+            if (previewBadge) {
+                previewBadge.innerText = zoneText;
+                previewBadge.className = `font-bold ${colorClass}`;
+            }
+            if (fsBadge) {
+                fsBadge.innerText = zoneText;
+                fsBadge.className = `font-bold ${colorClass}`;
+            }
+        }
+
+        /* Helper Reset Sorotan Efek Kiri/Kanan */
+        function resetZoneHighlights() {
+            const leftGlow = document.getElementById('fsLeftZoneGlow');
+            const rightGlow = document.getElementById('fsRightZoneGlow');
+            const leftBadge = document.getElementById('fsLeftZoneBadge');
+            const rightBadge = document.getElementById('fsRightZoneBadge');
+
+            if (leftGlow) {
+                leftGlow.className = "w-1/2 h-full border-r-4 border-dashed border-red-500/50 transition-all duration-300 flex flex-col justify-end p-8 bg-gradient-to-r from-red-950/30 to-transparent";
+            }
+            if (rightGlow) {
+                rightGlow.className = "w-1/2 h-full transition-all duration-300 flex flex-col justify-end items-end p-8 bg-gradient-to-l from-emerald-950/30 to-transparent";
+            }
+            if (leftBadge) {
+                leftBadge.className = "bg-red-600/90 text-white font-game font-bold text-3xl md:text-5xl px-6 py-3 rounded-2xl w-max border-2 border-red-400 shadow-2xl tracking-wider transition-all";
+            }
+            if (rightBadge) {
+                rightBadge.className = "bg-emerald-600/90 text-white font-game font-bold text-3xl md:text-5xl px-6 py-3 rounded-2xl w-max border-2 border-emerald-400 shadow-2xl tracking-wider transition-all";
+            }
+        }
+
+        /* Fullscreen Game Logic */
+        function enterFullScreenGame() {
+            const questionCount = window.appState.questions.length;
+            
+            if (questionCount < 5) {
+                alert(`Minimal 5 soal diperlukan untuk memulai game. Saat ini hanya ada ${questionCount} soal.\nSilakan buat atau impor soal terlebih dahulu!`);
+                return;
+            }
+
+            if (!window.appState.cameraActive) {
+                initCamera();
+            }
+
+            const elem = document.getElementById('fullscreenGameOverlay');
+            elem.classList.remove('hidden');
+            elem.classList.add('flex');
+
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {});
+            }
+
+            document.getElementById('fsPrepOverlay').classList.remove('hidden');
+            document.getElementById('fsPrepOverlay').classList.add('flex');
+            document.getElementById('fsCountdownOverlay').classList.add('hidden');
+            document.getElementById('fsSummaryOverlay').classList.add('hidden');
+            document.getElementById('fsActionContainer').classList.add('hidden');
+
+            window.appState.gameState = 'PREP';
+            window.appState.currentQuestionIndex = 0;
+            window.appState.score = 0;
+        }
+
+        function exitFullScreenGame() {
+            if (document.exitFullscreen && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+            const elem = document.getElementById('fullscreenGameOverlay');
+            if (elem) {
+                elem.classList.add('hidden');
+                elem.classList.remove('flex');
+            }
+
+            if (window.appState.timerInterval) {
+                clearInterval(window.appState.timerInterval);
+            }
+            window.appState.gameState = 'IDLE';
+        }
+
+        function startCountdownAndPlay() {
+            document.getElementById('fsPrepOverlay').classList.add('hidden');
+            document.getElementById('fsSummaryOverlay').classList.add('hidden');
+
+            const countdownOverlay = document.getElementById('fsCountdownOverlay');
+            const countdownNum = document.getElementById('fsCountdownNumber');
+            
+            countdownOverlay.classList.remove('hidden');
+            countdownOverlay.classList.add('flex');
+
+            let count = 3;
+            countdownNum.innerText = count;
+            playBeepSound(600, 0.15);
+
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownNum.innerText = count;
+                    playBeepSound(600, 0.15);
+                } else {
+                    clearInterval(interval);
+                    countdownOverlay.classList.add('hidden');
+                    countdownOverlay.classList.remove('flex');
+                    
+                    loadQuestionRound(window.appState.currentQuestionIndex);
+                }
+            }, 1000);
+        }
+
+        function loadQuestionRound(index) {
+            const questions = window.appState.questions;
+            if (index >= questions.length) {
+                showGameSummary();
+                return;
+            }
+
+            // Kembalikan tampilan zona ke keadaan netral/normal
+            resetZoneHighlights();
+
+            const currentQ = questions[index];
+            window.appState.gameState = 'PLAYING';
+            window.appState.timerSeconds = window.appState.timerDuration || 10;
+
+            document.getElementById('fsActionContainer').classList.add('hidden');
+            document.getElementById('fsBtnReveal').classList.remove('hidden');
+            document.getElementById('fsBtnNext').classList.add('hidden');
+
+            document.getElementById('fsQuestionCounter').innerText = `Soal ${index + 1} / ${questions.length}`;
+            document.getElementById('fsQuestionText').innerText = currentQ.text;
+            document.getElementById('fsScoreText').innerText = window.appState.score;
+            document.getElementById('fsTimerText').innerText = window.appState.timerSeconds;
+
+            const feedbackBanner = document.getElementById('fsFeedbackBanner');
+            feedbackBanner.classList.add('hidden');
+
+            dictateCurrentQuestionWithAI();
+
+            if (window.appState.timerInterval) clearInterval(window.appState.timerInterval);
+
+            window.appState.timerInterval = setInterval(() => {
+                window.appState.timerSeconds--;
+                document.getElementById('fsTimerText').innerText = window.appState.timerSeconds;
+
+                if (window.appState.timerSeconds <= 3 && window.appState.timerSeconds > 0) {
+                    playBeepSound(800, 0.1);
+                }
+
+                if (window.appState.timerSeconds <= 0) {
+                    clearInterval(window.appState.timerInterval);
+                    onTimerFinishedWaitGuru();
+                }
+            }, 1000);
+        }
+
+        function onTimerFinishedWaitGuru() {
+            window.appState.gameState = 'WAITING_REVEAL';
+            window.appState.lockedZoneAtFinish = window.appState.detectedZone;
+
+            const feedbackBanner = document.getElementById('fsFeedbackBanner');
+            feedbackBanner.classList.remove('hidden');
+            feedbackBanner.className = 'mt-2 py-2 px-4 rounded-xl text-base font-bold font-game bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse';
+            feedbackBanner.innerHTML = `<i class="fa-solid fa-hand-paper mr-2"></i> WAKTU HABIS! Menunggu guru menekan tombol "LIHAT JAWABAN"...`;
+
+            const actionBox = document.getElementById('fsActionContainer');
+            actionBox.classList.remove('hidden');
+            document.getElementById('fsBtnReveal').classList.remove('hidden');
+            document.getElementById('fsBtnNext').classList.add('hidden');
+        }
+
+        function revealAnswerAndEvaluate() {
+            window.appState.gameState = 'REVEALED';
+            const currentQ = window.appState.questions[window.appState.currentQuestionIndex];
+            const playerPos = window.appState.lockedZoneAtFinish || window.appState.detectedZone;
+
+            // SOROT OTOMATIS ZONA JAWABAN BENAR DENGAN EFEK CERAH & BERKEDIP
+            const leftGlow = document.getElementById('fsLeftZoneGlow');
+            const rightGlow = document.getElementById('fsRightZoneGlow');
+            const leftBadge = document.getElementById('fsLeftZoneBadge');
+            const rightBadge = document.getElementById('fsRightZoneBadge');
+
+            if (currentQ.answer === true) { 
+                // KUNCI JAWABAN: BENAR (KANAN)
+                if (rightGlow) {
+                    rightGlow.className = "w-1/2 h-full transition-all duration-300 flex flex-col justify-end items-end p-8 bg-emerald-500/40 animate-pulse border-4 border-emerald-400 shadow-[inset_0_0_80px_rgba(34,197,94,0.9)]";
+                }
+                if (rightBadge) {
+                    rightBadge.className = "bg-emerald-500 text-white font-game font-bold text-4xl md:text-6xl px-8 py-4 rounded-2xl w-max border-4 border-white shadow-[0_0_40px_rgba(34,197,94,1)] tracking-wider animate-bounce scale-110";
+                }
+                if (leftGlow) {
+                    leftGlow.className = "w-1/2 h-full border-r-4 border-dashed border-slate-800 transition-all duration-300 flex flex-col justify-end p-8 bg-slate-950/80 opacity-20 grayscale";
+                }
+            } else { 
+                // KUNCI JAWABAN: SALAH (KIRI)
+                if (leftGlow) {
+                    leftGlow.className = "w-1/2 h-full border-r-4 border-dashed border-red-400 transition-all duration-300 flex flex-col justify-end p-8 bg-red-500/40 animate-pulse shadow-[inset_0_0_80px_rgba(239,68,68,0.9)]";
+                }
+                if (leftBadge) {
+                    leftBadge.className = "bg-red-500 text-white font-game font-bold text-4xl md:text-6xl px-8 py-4 rounded-2xl w-max border-4 border-white shadow-[0_0_40px_rgba(239,68,68,1)] tracking-wider animate-bounce scale-110";
+                }
+                if (rightGlow) {
+                    rightGlow.className = "w-1/2 h-full transition-all duration-300 flex flex-col justify-end items-end p-8 bg-slate-950/80 opacity-20 grayscale";
+                }
+            }
+
+            let playerAnswer = null;
+            if (playerPos === 'BENAR') playerAnswer = true;
+            if (playerPos === 'SALAH') playerAnswer = false;
+
+            const isCorrect = (playerAnswer === currentQ.answer);
+            const feedbackBanner = document.getElementById('fsFeedbackBanner');
+            feedbackBanner.classList.remove('hidden');
+
+            if (playerAnswer === null) {
+                feedbackBanner.className = 'mt-2 py-2 px-4 rounded-xl text-base font-bold font-game bg-amber-500/20 text-amber-300 border border-amber-500/40';
+                feedbackBanner.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-1"></i> Posisi di Tengah (Tidak Menjawab). Jawaban Benar: <span class="underline">${currentQ.answer ? 'BENAR' : 'SALAH'}</span>`;
+                playBeepSound(300, 0.4);
+            } else if (isCorrect) {
+                window.appState.score += 100;
+                document.getElementById('fsScoreText').innerText = window.appState.score;
+                feedbackBanner.className = 'mt-2 py-2 px-4 rounded-xl text-base font-bold font-game bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                feedbackBanner.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i> JAWABAN BENAR (+100 Poin) ${currentQ.explanation ? '- ' + currentQ.explanation : ''}`;
+                playSuccessArpeggio();
+            } else {
+                feedbackBanner.className = 'mt-2 py-2 px-4 rounded-xl text-base font-bold font-game bg-red-500/20 text-red-300 border border-red-500/40';
+                feedbackBanner.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1"></i> JAWABAN SALAH! Kunci Jawaban: ${currentQ.answer ? 'BENAR' : 'SALAH'}. ${currentQ.explanation ? currentQ.explanation : ''}`;
+                playErrorSound();
+            }
+
+            document.getElementById('fsBtnReveal').classList.add('hidden');
+            const btnNext = document.getElementById('fsBtnNext');
+            btnNext.classList.remove('hidden');
+            btnNext.classList.add('flex');
+
+            const isLast = (window.appState.currentQuestionIndex === window.appState.questions.length - 1);
+            btnNext.querySelector('span').innerText = isLast ? 'LIHAT HASIL AKHIR' : 'SOAL SELANJUTNYA';
+        }
+
+        function proceedToNextQuestion() {
+            window.appState.currentQuestionIndex++;
+            loadQuestionRound(window.appState.currentQuestionIndex);
+        }
+
+        /* AI Voice Dictation - Langsung Didiktekan Tanpa Delay Jaringan */
+        function dictateCurrentQuestionWithAI() {
+            const currentQ = window.appState.questions[window.appState.currentQuestionIndex];
+            if (!currentQ) return;
+
+            // Hentikan audio yang sedang berjalan jika ada
+            if (window.appState.audioPlayer) {
+                window.appState.audioPlayer.pause();
+            }
+
+            // Gunakan Web Speech API secara instan pada detik ke-1 tanpa delay fetch
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(currentQ.text);
+                utterance.lang = 'id-ID';
+                utterance.rate = 1.0; // Kecepatan suara alami dan responsif
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        /* Show Final Game Summary */
+        function showGameSummary(isEarly = false) {
+            window.appState.gameState = 'SUMMARY';
+            const total = window.appState.questions.length;
+            const answeredCount = Math.min(window.appState.currentQuestionIndex, total);
+            const correctCount = Math.floor(window.appState.score / 100);
+
+            const totalText = isEarly 
+                ? `${answeredCount} dari ${total} Soal (Selesai Dini)`
+                : `${total} Soal`;
+
+            document.getElementById('summaryTotalQuestions').innerText = totalText;
+            document.getElementById('summaryCorrectAnswers').innerText = `${correctCount} Soal`;
+            document.getElementById('summaryFinalScore').innerText = window.appState.score;
+
+            const summaryModal = document.getElementById('fsSummaryOverlay');
+            summaryModal.classList.remove('hidden');
+            summaryModal.classList.add('flex');
+        }
+
+        function finishGameEarly() {
+            if (window.appState.gameState === 'IDLE') return;
+
+            if (window.appState.timerInterval) {
+                clearInterval(window.appState.timerInterval);
+            }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+            if (window.appState.audioPlayer) {
+                window.appState.audioPlayer.pause();
+            }
+
+            showToast("Permainan dihentikan oleh guru.");
+            showGameSummary(true);
+        }
+
+        /* Helper PCM16 to WAV audio converter */
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16Data, sampleRate = 24000) {
+            const numChannels = 1;
+            const bytesPerSample = 2;
+            const blockAlign = numChannels * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = pcm16Data.length * bytesPerSample;
+
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, 16, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            let offset = 44;
+            for (let i = 0; i < pcm16Data.length; i++, offset += 2) {
+                view.setInt16(offset, pcm16Data[i], true);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        /* Sound Effects Synthesizer */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playBeepSound(freq, duration) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playSuccessArpeggio() {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    setTimeout(() => playBeepSound(freq, 0.15), idx * 80);
+                });
+            } catch(e) {}
+        }
+
+        function playErrorSound() {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } catch(e) {}
+        }
+
+        /* Toast notification popup */
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-5 right-5 bg-indigo-600 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-2xl z-50 border border-indigo-400 animate-bounce';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check mr-2"></i> ${message}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
